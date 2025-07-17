@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  swagger-backend:
+    build: ./swagger-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./swagger-backend/.env
+    volumes:
+      - ./swagger-backend:/app 

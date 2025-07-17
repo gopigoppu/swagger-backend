@@ -1,0 +1,20 @@
+[project]
+name = "swagger-backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiofiles>=24.1.0",
+    "black>=25.1.0",
+    "fastapi[standard]>=0.116.1",
+    "flake8>=7.3.0",
+    "httpx>=0.28.1",
+    "langchain-groq>=0.3.6",
+    "langgraph>=0.5.3",
+    "openapi-spec-validator>=0.7.2",
+    "pip>=25.1.1",
+    "pytest>=8.4.1",
+    "python-dotenv>=1.1.1",
+    "pyyaml>=6.0.2",
+]

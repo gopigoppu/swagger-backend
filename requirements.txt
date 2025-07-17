@@ -1,0 +1,10 @@
+fastapi
+python-dotenv
+aiofiles
+openapi-spec-validator
+langgraph
+httpx
+pyyaml
+pytest
+black
+flake8 
