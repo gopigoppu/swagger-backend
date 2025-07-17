@@ -2,6 +2,8 @@ from typing import Dict, Any, Tuple
 import json
 import os
 import yaml
+import ast
+import re
 from openapi_spec_validator import validate_spec
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
@@ -43,24 +45,96 @@ def correct_openapi_with_llm(original_content: str, errors: list, llm=None) -> D
     """
     if llm is None:
         llm = get_llm()
-    prompt = f"""
-You are an expert in OpenAPI/Swagger specifications. The following OpenAPI spec has validation errors. Please correct the errors and explain each change you make.\n\nOriginal Spec:\n{original_content}\n\nErrors:\n{errors}\n\nReturn the corrected spec in both YAML and JSON, and a list of explanations for each change.\nFormat:\n---\nYAML:\n<corrected_yaml>\n---\nJSON:\n<corrected_json>\n---\nEXPLANATIONS:\n- <explanation1>\n- <explanation2>\n...\n"""
+    prompt = f"""You are an expert in OpenAPI/Swagger specifications.
+
+    The following OpenAPI spec contains validation errors.
+
+    Your tasks:
+    1. Correct the OpenAPI spec.
+    2. Provide the corrected spec in both YAML and JSON formats.
+    3. Explain each change made.
+    4. Return **only** a Python dictionary with the following structure and keys:
+
+    {{
+        'yaml': '<corrected YAML string>',
+        'json': '<corrected JSON string>',
+        'explanations': ['<explanation 1>', '<explanation 2>', ...],
+        'raw_response': '<full original raw output including YAML, JSON, and explanations>'
+    }}
+
+    IMPORTANT:
+    - Do NOT include markdown code blocks like ```yaml or ```python
+    - Do NOT include explanations or narrative text before or after the dictionary
+    - Return ONLY the dictionary object as plain text
+
+    Input:
+    ---
+    Original Spec:
+    {original_content}
+
+    Validation Errors:
+    {errors}
+    """
+    print('-----------------------------------')
+    print(prompt)
+    print('-----------------------------------')
     response = llm.invoke(prompt)
     yaml_part, json_part, explanations = '', '', []
-    if 'YAML:' in response and 'JSON:' in response and 'EXPLANATIONS:' in response:
-        try:
-            yaml_part = response.split('YAML:')[1].split('---')[0].strip()
-            json_part = response.split('JSON:')[1].split('---')[0].strip()
-            explanations = [line.strip(
-                '- ').strip() for line in response.split('EXPLANATIONS:')[1].split('\n') if line.strip()]
-        except Exception:
-            pass
-    return {
-        'yaml': yaml_part,
-        'json': json_part,
-        'explanations': explanations,
-        'raw_response': response
-    }
+    print("----- RAW LLM RESPONSE START -----")
+    print(repr(response.content))  # use repr to reveal hidden characters
+    print("----- RAW LLM RESPONSE END -----")
+    print('----------------OUTPUT-------------------')
+    # if 'YAML:' in response and 'JSON:' in response and 'EXPLANATIONS:' in response:
+    #     try:
+    #         yaml_part = response.split('YAML:')[1].split('---')[0].strip()
+    #         json_part = response.split('JSON:')[1].split('---')[0].strip()
+    #         explanations = [line.strip(
+    #             '- ').strip() for line in response.split('EXPLANATIONS:')[1].split('\n') if line.strip()]
+    #     except Exception:
+    #         pass
+    res = extract_llm_response_fields(response.content)
+    return res
+
+
+def clean_llm_response_block(content):
+    # Step 1: Extract .content if LangChain object
+    if hasattr(content, "content"):
+        content = content.content
+
+    # Step 2: Strip Markdown code block if present
+    content = content.strip()
+
+    # Match triple-backtick Python block
+    if content.startswith("```python") and content.endswith("```"):
+        content = content[len("```python"):].strip()
+        content = content[:-3].strip() if content.endswith("```") else content
+
+    return content
+
+
+def extract_llm_response_fields(content):
+    """
+    Clean LLM output and extract structured fields.
+    """
+    try:
+        cleaned = clean_llm_response_block(content)
+        response_dict = ast.literal_eval(cleaned)
+
+        return {
+            'yaml': response_dict.get('yaml', '').strip(),
+            'json': response_dict.get('json', '').strip(),
+            'explanations': response_dict.get('explanations', []),
+            'raw_response': response_dict.get('raw_response', '').strip()
+        }
+
+    except Exception as e:
+        print("❌ Failed to parse cleaned LLM response:", e)
+        return {
+            'yaml': '',
+            'json': '',
+            'explanations': [],
+            'raw_response': content if isinstance(content, str) else str(content)
+        }
 
 
 def run_correction_pipeline(spec_content: str, llm=None) -> Dict[str, Any]:
